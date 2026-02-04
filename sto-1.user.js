@@ -1,0 +1,28 @@
+// ==UserScript==
+// @name     sto-1 Linkage
+// @namespace    http://tampermonkey.net/
+// @author       https://github.com/Skeeve
+// @version  8
+// @description  Change every hoster-link in preparation for the other scripts
+// @grant    none
+// @match  https://s.to/serie/*/staffel-*
+// ==/UserScript==
+
+// Alle Links auf eine s.to Serien-Seite ändern,
+document.querySelectorAll('tr.episode-row').forEach( episode => {
+    var url = episode.onclick.toString().replace( /^.*'(\/.*)'.*/s, "$1");
+    console.log(url);
+    episode.querySelectorAll('img').forEach( img => {
+        var linkUrl = url + "#" + img.title;
+        // Cursor auf Zeiger setzen, damit man sieht, dass es klickbar ist
+        img.style.cursor = 'crosshair';
+
+        img.addEventListener('click', function(event) {
+            // Verhindert, dass der Klick das 'onclick' der Tabellenzeile auslöst
+            event.stopPropagation();
+
+            // Öffnet das neue Fenster mit den gewünschten Sicherheitsmerkmalen
+            window.open(linkUrl, '_blank', 'noopener,noreferrer');
+        });
+    });
+});
