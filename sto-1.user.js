@@ -2,7 +2,9 @@
 // @name     sto-1 Linkage
 // @namespace    http://tampermonkey.net/
 // @author       https://github.com/Skeeve
-// @version  8
+// @version  8.1
+// @downloadURL  https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-1.user.js
+// @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-1.user.js
 // @description  Change every hoster-link in preparation for the other scripts
 // @grant    none
 // @match  https://s.to/serie/*/staffel-*
