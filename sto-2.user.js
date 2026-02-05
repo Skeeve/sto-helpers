@@ -2,7 +2,7 @@
 // @name         sto-2 send stream URL to JD
 // @namespace    http://tampermonkey.net/
 // @author       https://github.com/Skeeve with some help from Gemini
-// @version      8
+// @version      8.1
 // @downloadURL  https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-2.user.js
 // @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-2.user.js
 // @grant        GM_xmlhttpRequest
@@ -38,7 +38,7 @@
     const JDOWNLOADER="http://127.0.0.1:9666/flashgot";
 
     // Close the "download window" when done
-	const CloseWhenDone = false;
+	const CloseWhenDone = true;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -182,7 +182,7 @@
             alert("Couldn't find any stream")
             return;
         }
-		// Combine the url with the current location to get an absolute url and 
+		// Combine the url with the current location to get an absolute url and
 		// send it to jDownloader
         const absoluteUrl = new URL(wanted.trim(), window.location.href);
         toJDownloader(absoluteUrl, series, season, episode, theTitle, seasondir, CloseWhenDone);

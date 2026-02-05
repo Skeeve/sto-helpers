@@ -7,7 +7,7 @@
 // @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-1.user.js
 // @description  Change every hoster-link in preparation for the other scripts
 // @grant        none
-// @match        https://s.to/serie/*/staffel-*
+// @match        https://s.to/serie/*
 // @exclude      https://s.to/serie/*/staffel-*/episode-*
 // ==/UserScript==
 
