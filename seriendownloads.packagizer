@@ -1,0 +1,80 @@
+[
+	{
+		"filetypeFilter": {
+			"customs": null,
+			"matchType": "IS",
+			"archivesEnabled": false,
+			"audioFilesEnabled": false,
+			"docFilesEnabled": false,
+			"exeFilesEnabled": false,
+			"hashEnabled": false,
+			"imagesEnabled": false,
+			"subFilesEnabled": false,
+			"useRegex": false,
+			"videoFilesEnabled": false,
+			"enabled": false
+		},
+		"originFilter": {
+			"matchType": "IS",
+			"origins": [],
+			"enabled": false
+		},
+		"hosterURLFilter": {
+			"matchType": "EQUALS",
+			"regex": "",
+			"useRegex": false,
+			"enabled": false
+		},
+		"onlineStatusFilter": {
+			"matchType": "IS",
+			"onlineStatus": "OFFLINE",
+			"enabled": false
+		},
+		"chunks": -1,
+		"created": 1770217709144,
+		"sourceURLFilter": {
+			"matchType": "CONTAINS",
+			"regex": "",
+			"useRegex": false,
+			"enabled": false
+		},
+		"conditionFilter": {
+			"conditions": [],
+			"matchType": "IS_TRUE",
+			"enabled": false
+		},
+		"testUrl": "",
+		"enabled": true,
+		"filename": "<jd:orgpackagename:2>.<jd:orgfiletype>",
+		"packagenameFilter": {
+			"matchType": "EQUALS",
+			"regex": "(.*)##(\\d+ - .*)",
+			"useRegex": true,
+			"enabled": true
+		},
+		"filenameFilter": {
+			"matchType": "CONTAINS",
+			"regex": "",
+			"useRegex": false,
+			"enabled": false
+		},
+		"matchAlwaysFilter": {
+			"enabled": false
+		},
+		"name": "Seriendownloads",
+		"packageName": "<jd:orgpackagename:1>",
+		"pluginStatusFilter": {
+			"matchType": "IS",
+			"pluginStatus": "PREMIUM",
+			"enabled": false
+		},
+		"autoAddEnabled": true,
+		"autoStartEnabled": true,
+		"filesizeFilter": {
+			"from": 0,
+			"matchType": "BETWEEN",
+			"to": 0,
+			"enabled": false
+		}
+	}
+]
