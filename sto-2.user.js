@@ -2,7 +2,7 @@
 // @name         sto-2 send stream URL to JD
 // @namespace    http://tampermonkey.net/
 // @author       https://github.com/Skeeve with some help from Gemini
-// @version      8.1
+// @version      8.3
 // @downloadURL  https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-2.user.js
 // @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-2.user.js
 // @grant        GM_xmlhttpRequest
@@ -11,6 +11,7 @@
 // @run-at       document-start
 // @description  Follow to the selected hoster
 // @match        https://s.to/serie/*/staffel-*/episode-*
+// @match        https://serienstream.to/serie/*/staffel-*/episode-*
 // ==/UserScript==
 
 (function() {
@@ -29,7 +30,9 @@
     ];
 
     // My default location for storing stuff
-    const TARGET='/Users/shk/Downloads/jdyt/Mediatheken/Serien';
+    const TARGET='/Users/shk/Downloads/jdyt/Mediatheken/Serien'; /*
+    const TARGET='/Volumes/INTENSO/Serien';
+    //*/
 
     // A tag used to signal to jDownloader what to do with the links
     const TAG4JD='#S-TO#';
@@ -98,107 +101,93 @@
     function executeMainLogic(h1, h2) {
         log("Target found! Start modification...");
 
-		// The provider is given in the location's hash
-        const provider = document.location.hash.substring(1)
-        if (provider == '') {
-            alert("No provider selected")
-            return
-        }
-
-		// Get the series name from the first h1
-        var series = h1.textContent.trim();
-        log("Series: " + series);
-
-		// get the episodes name from the first h2
-        const episodeFull = h2.textContent.trim();
-        log("Episode: " + episodeFull);
-		// Some episodes have the english title in brackets, some don't. So we try both regexes
-        var matches = episodeFull.match(/^S0*(\d+)E0*(\d+):\s*(.*)\s+\((.*)\)/);
-        if (matches === null) {
-			// there was no english title, try again without it
-            matches = episodeFull.match(/^S0*(\d+)E0*(\d+):\s*((.*))/);
-            if (matches === null) {
-                alert("Cannot retrieve episode information from title");
-                return;
-            }
-        }
-		// collect the matches and log them
-        const season = matches[1];
-        const episode = matches[2];
-        const titel = matches[3];
-        const title = matches[4];
-        log("Season: " + season);
-        log("Episode: " + episode);
-        log("Titel: " + titel);
-        log("Title: " + title);
-
-		// get the episode's for our selected provider
-        const allProviders = realQuerySelectorAll.call(document,
-			'button:has( > img[title="' + provider + '"])'
-		);
-        if (allProviders.length == 0) {
-            alert("Couldn't find provider " + provider);
-            return
-        }
-
-		// collect the urls for german, english or any, which is any other language.
-        var german = '';
-        var english = '';
-        var any = '';
-        allProviders.forEach(btn => {
-			// get the language flag from the use-tag of the svg
-            const theUse = realElemQuery.call(btn, 'use');
-			// the language is the part of the href after the last dash
-            const lang = theUse.getAttribute('href').replace(/^.*-/,'');
-            log(lang);
-			// assign the url to the correct language variable
-            switch (lang) {
-                case 'german': german=btn.getAttribute('data-play-url');
-                    break;
-                case 'english': english=btn.getAttribute('data-play-url');
-                    break;
-                default: any=btn.getAttribute('data-play-url');
-            }
-        });
-		// store german as default
-        var wanted = german;
-        var theTitle = titel;
-        var seasondir = 'Staffel'
-		// If we prefer the series in english
-		// or if there is no german stream but an english one, we take the english stream
-        if (inEnglish.indexOf(series) >= 0 && (english != '' || wanted == '')) {
-            wanted = english;
-            theTitle = title;
-            seasondir = 'Season';
-        }
-		// If there is no german or english stream but any other one, we take the any stream
-        if (wanted == '') {
-            wanted = any;
-            theTitle = title;
-            seasondir = 'Season';
-        }
-		// If there is no stream at all, we alert the user and stop
-        if (wanted == '') {
-            alert("Couldn't find any stream")
+        const targetProvider = document.location.hash.substring(1);
+        if (targetProvider == '') {
+            alert("No provider selected");
             return;
         }
-		// Combine the url with the current location to get an absolute url and
-		// send it to jDownloader
-        const absoluteUrl = new URL(wanted.trim(), window.location.href);
-        toJDownloader(absoluteUrl, series, season, episode, theTitle, seasondir, CloseWhenDone);
-    }
 
+        const series = h1.textContent.trim();
+        const episodeFull = h2.textContent.trim();
+
+        let matches = episodeFull.match(/^S0*(\d+)E0*(\d+):\s*(.*)\s+\((.*)\)/) ||
+                      episodeFull.match(/^S0*(\d+)E0*(\d+):\s*((.*))/);
+
+        if (!matches) {
+            alert("Cannot retrieve episode information");
+            return;
+        }
+
+        const season = matches[1], episode = matches[2], titel = matches[3], title = matches[4];
+
+        // Wir holen jetzt ALLE Buttons, nicht nur die vom Wunsch-Provider
+        const allButtons = Array.from(realQuerySelectorAll.call(document, 'button[data-play-url]'));
+
+        // Bestimme die Ziel-Sprache basierend auf deiner Liste
+        const preferredLang = (inEnglish.indexOf(series) >= 0) ? 'English' : 'Deutsch';
+        log("Preferred Language: " + preferredLang);
+
+        let wanted = '';
+        let finalTitel = (preferredLang === 'English') ? title : titel;
+        let seasondir = (preferredLang === 'English') ? 'Season' : 'Staffel';
+
+        // --- DIE NEUE PRIORITÄTEN-LOGIK ---
+
+        // 1. Suche Wunsch-Provider + Wunsch-Sprache
+        let match = allButtons.find(btn =>
+            btn.getAttribute('data-hoster-name') === targetProvider &&
+            btn.getAttribute('data-language-label') === preferredLang
+        );
+
+        // 2. Suche ANDEREN Provider + Wunsch-Sprache
+        if (!match) {
+            log("Wunsch-Provider hat Wunsch-Sprache nicht. Suche Alternative...");
+            match = allButtons.find(btn => btn.getAttribute('data-language-label') === preferredLang);
+        }
+
+        // 3. Suche Wunsch-Provider + Beliebige Sprache (Fallback)
+        if (!match) {
+            log("Wunsch-Sprache nirgends gefunden. Suche Wunsch-Provider mit anderer Sprache...");
+            match = allButtons.find(btn => btn.getAttribute('data-hoster-name') === targetProvider);
+        }
+
+        // 4. Absoluter Fallback: Irgendwas nehmen
+        if (!match && allButtons.length > 0) {
+            log("Nehme ersten verfügbaren Stream als Fallback.");
+            match = allButtons[0];
+        }
+
+        if (match) {
+            wanted = match.getAttribute('data-play-url');
+            const foundHost = match.getAttribute('data-hoster-name');
+            const foundLang = match.getAttribute('data-language-label');
+            log(`Found: ${foundHost} (${foundLang})`);
+
+            // Falls wir doch Englisch nehmen mussten (weil kein Deutsch da), Titel anpassen
+            if (foundLang === 'English') {
+                finalTitel = title;
+                seasondir = 'Season';
+            }
+
+            const absoluteUrl = new URL(wanted.trim(), window.location.href);
+            toJDownloader(absoluteUrl, series, season, episode, finalTitel, seasondir, CloseWhenDone);
+        } else {
+            alert("Couldn't find any stream at all.");
+        }
+    }
     /////////////////////// Helpers //////////////////////
 
     function toJDownloader (link, series, season, episode, title, seasondir, closeWhenDone) {
 
-        // The pckg becomes the Series + the episode
-        const pckg= series + '##' + fill0(episode, 2) + " - " + title;
+        // The pckg becomes the Series
+        const pckg= series + "##" + fill0(episode, 2) + " - " + title;
 
         // This will be the download target
         // $TARGET "/Season " SEASON# "/"
         const saveto= TARGET + "/" + series + "/" + seasondir + " " + season;
-
+        log(link.href);
+        //if (!confirm(link.href)) { return }
+        // return;
         // collect the data to send to JD
         var data= {
             "passwords" : "",
@@ -208,12 +197,11 @@
             "dir": saveto,
             "submit": "submit"
         };
-        log(link.href);
         // Send the data
         GM_xmlhttpRequest({
             method: "POST",
             url: JDOWNLOADER,
-            data: objEncodeURIComponent(data),
+            data: propEncodeURIComponent(data),
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded"
             },
@@ -232,10 +220,11 @@
         });
     }
 
-    function objEncodeURIComponent(obj) {
+    function propEncodeURIComponent(obj) {
         var str = [];
         for (var p in obj) {
             if (obj.hasOwnProperty(p)) {
+                log(p);
                 str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
             }
         }
