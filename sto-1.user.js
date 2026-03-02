@@ -2,13 +2,15 @@
 // @name         sto-1 Linkage
 // @namespace    http://tampermonkey.net/
 // @author       https://github.com/Skeeve with some help from Gemini
-// @version      8.2
+// @version      8.3
 // @downloadURL  https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-1.user.js
 // @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-1.user.js
 // @description  Change every hoster-link in preparation for the other scripts
 // @grant        none
 // @match        https://s.to/serie/*
+// @match        https://serienstream.to/serie/*
 // @exclude      https://s.to/serie/*/staffel-*/episode-*
+// @exclude      https://serienstream.to/serie/*/staffel-*/episode-*
 // ==/UserScript==
 
 // Alle Links auf eine s.to Serien-Seite ändern,
