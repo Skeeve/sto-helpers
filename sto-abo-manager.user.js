@@ -1,10 +1,13 @@
 // ==UserScript==
-// @name         S.to Abo-Manager Deluxe (Refresh Update)
+// @name         sto Abo-Manager Deluxe
 // @namespace    http://tampermonkey.net/
-// @version      2026-02-05.5
+// @version      1
 // @description  Scannt gezielt nur markierte Updates nach.
-// @author       You & Gemini
+// @downloadURL  https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-abo-manager.user.js
+// @updateURL    https://github.com/Skeeve/sto-helpers/raw/refs/heads/main/sto-abo-manager.user.js
+// @author       https://github.com/Skeeve & Gemini
 // @match        https://s.to/account/subscribed*
+// @match        https://s.to/account/watchlist*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=s.to
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addElement
@@ -15,8 +18,14 @@
     'use strict';
 
     const STORAGE_KEY = 'sto_abo_cache';
+    const DELAY_BETWEEN_REQUESTS = 1; // ms
+	// SHOW_LOG Displays a log window that documents the scanning and refreshing process (useful for troubleshooting)
+	const SHOW_LOG = false; // true/false
+	const LOG_WIDTH = '350px'; // Width of the log window (e.g. '300px' or '20%')
+	const LOG_HEIGHT = '450px'; // Max height of the log window (e.g. '400px' or '30vh')
 
-GM_addStyle(`
+    /// Styles
+    GM_addStyle(`
         #tm-logger { pointer-events: none; }
         /* Die neue Highlight-Klasse */
         .tm-highlight .cover-card.is-new {
@@ -53,16 +62,67 @@ GM_addStyle(`
         }
     `);
 
-    // Hide the console with display: none;
+    const btnContainer_style = `
+        position:fixed;
+        bottom:20px;
+        right:20px;
+        z-index:9999;
+        display:flex;
+        gap:10px;
+    `.replace(/\s+/g, ' ').trim();
+
+    const btn_style = `
+        padding:10px;
+        background:#27ae60;
+        color:white;
+        border:none;
+        border-radius:5px;
+        cursor:pointer;
+        font-weight:bold;
+    `.replace(/\s+/g, ' ').trim();
+
+    const btnRefresh_style = `
+        padding:10px;
+        background:#2980b9;
+        color:white;
+        border:none;
+        border-radius:5px;
+        cursor:pointer;
+        font-weight:bold;
+    `.replace(/\s+/g, ' ').trim();
+
+    const btnClear_style = `
+        padding:10px;
+        background:#c0392b;
+        color:white;
+        border:none;
+        border-radius:5px;
+        cursor:pointer;
+        font-weight:bold;
+    `.replace(/\s+/g, ' ').trim();
+
+    const badge_style = `
+        position:absolute;
+        top:5px;
+        left:5px;
+        background:#27ae60;
+        color:white;
+        padding:2px 6px;
+        border-radius:3px;
+        font-weight:bold;
+        font-size:10px;
+        z-index:10;
+    `.replace(/\s+/g, ' ').trim();
+
     const loggerUI = GM_addElement(document.documentElement, 'div', {
         id: 'tm-logger',
         style:`
-            display: none;
+            display: ${SHOW_LOG?'block':'none'};
+            width: ${LOG_WIDTH};
+            max-height: ${LOG_HEIGHT};
             position: fixed;
             top: 0;
             right: 0;
-            width: 350px;
-            max-height: 450px;
             background: rgba(0, 0, 0, 0.85);
             color: cyan;
             z-index: 999999;
@@ -87,7 +147,7 @@ GM_addStyle(`
         const cachedData = localStorage.getItem(STORAGE_KEY);
         if (cachedData) {
             const cache = JSON.parse(cachedData);
-            log("Cache geladen.");
+            log("Cache loaded.");
             reorganizeUI(cache.series);
             if (cache.date !== new Date().toDateString()) startScan();
         } else {
@@ -96,39 +156,39 @@ GM_addStyle(`
     });
 
     const btnContainer = document.createElement('div');
-    btnContainer.style = 'position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; gap:10px;';
+    btnContainer.style = btnContainer_style;
     document.body.appendChild(btnContainer);
 
     const btn = document.createElement('button');
     btn.innerHTML = 'Full Scan';
-    btn.style = 'padding:10px; background:#27ae60; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;';
+    btn.style = btn_style;
     btnContainer.appendChild(btn);
 
     const btnRefresh = document.createElement('button');
-    btnRefresh.innerHTML = 'Updates prüfen';
-    btnRefresh.style = 'padding:10px; background:#2980b9; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;';
+    btnRefresh.innerHTML = 'Check updates';
+    btnRefresh.style = btnRefresh_style;
     btnContainer.appendChild(btnRefresh);
 
     const btnClear = document.createElement('button');
-    btnClear.innerHTML = 'Cache leeren';
-    btnClear.style = 'padding:10px; background:#c0392b; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;';
+    btnClear.innerHTML = 'Clear cache';
+    btnClear.style = btnClear_style;
     btnContainer.appendChild(btnClear);
 
     btnClear.onclick = () => { localStorage.removeItem(STORAGE_KEY); location.reload(); };
     btn.onclick = () => startScan();
 
-    // DER NEUE REFRESH-LOGIK
+    // Refresh Logic
     btnRefresh.onclick = async () => {
         const cachedData = localStorage.getItem(STORAGE_KEY);
-        if (!cachedData) return log("Kein Cache zum Prüfen vorhanden.");
+        if (!cachedData) return log("No cache available for verification.");
 
         let cache = JSON.parse(cachedData);
         let updatesOnly = cache.series.filter(s => s.hasNewContent);
 
-        if (updatesOnly.length === 0) return log("Keine markierten Updates zum Nachscannen.");
+        if (updatesOnly.length === 0) return log("No marked updates to rescan.");
 
         btnRefresh.disabled = true;
-        log(`Prüfe ${updatesOnly.length} Updates...`);
+        log(`Checking ${updatesOnly.length} Updates...`);
 
         for (let i = 0; i < updatesOnly.length; i++) {
             const series = updatesOnly[i];
@@ -139,28 +199,29 @@ GM_addStyle(`
 
                 // Falls es nicht mehr neu ist:
                 if (!details.hasNewContent) {
-                    log(`ERLEDIGT: ${series.title}`);
+                    log(`DONE: ${series.title}`);
                     series.hasNewContent = false;
 
                     // UI sofort live anpassen
-                    const cardWrapper = document.querySelector(`form[action*="/${series.id}"]`)?.closest('.col-6') ||
-                                        document.querySelector(`.tm-highlight img[alt="${series.title}"]`)?.closest('.col-6');
+                    const cardWrapper = document.querySelector(`form[action*="/${series.id}"]`)?.closest('div[class*="col-"]') ||
+                                        document.querySelector(`.tm-highlight img[alt="${series.title}"]`)?.closest('div[class*="col-"]');
 
                     if (cardWrapper) {
                         const cardInner = cardWrapper.querySelector('.cover-card');
-                        cardInner.style.border = "none";
-                        cardInner.style.boxShadow = "none";
-                        const badge = cardInner.querySelector('.tm-badge');
-                        if (badge) badge.remove();
+                        if (cardInner) {
+                            cardInner.classList.remove('is-new');
+                            const badge = cardInner.querySelector('.tm-badge');
+                            if (badge) badge.remove();
+                        }
                     }
                 }
-            } catch (e) { log(`Fehler bei ${series.title}`); }
-            await new Promise(r => setTimeout(r, 600));
+            } catch (e) { log(`Error at ${series.title}`); }
+            await new Promise(r => setTimeout(r, DELAY_BETWEEN_REQUESTS));
         }
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-        log("Refresh abgeschlossen.");
-        btnRefresh.innerHTML = 'Updates prüfen';
+        log("Refreshed.");
+        btnRefresh.innerHTML = 'Check updates';
         btnRefresh.disabled = false;
     };
 
@@ -172,12 +233,17 @@ GM_addStyle(`
         let hasMore = true;
 
         while (hasMore) {
-            btn.innerHTML = `Lade Seite ${page}...`;
+            btn.innerHTML = `Loading ${page}...`;
             try {
                 const html = await fetchPage(page);
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-                const cards = doc.querySelectorAll('.col-6.col-sm-4.col-md-3.col-lg-2');
+
+                // Dynamic: Search grid elements based on subscription forms
+                const cards = Array.from(doc.querySelectorAll('form[action*="/account/subscribed/"]'))
+                    .map(form => form.closest('div[class*="col-"]'))
+                    .filter(Boolean);
+
                 if (cards.length === 0) { hasMore = false; } else {
                     cards.forEach(card => {
                         const titleTag = card.querySelector('.show-title');
@@ -189,12 +255,25 @@ GM_addStyle(`
                         }
                     });
                     const nextLink = doc.querySelector(`a[href*="page=${page + 1}"]`);
-                    if (nextLink) { page++; await new Promise(r => setTimeout(r, 300)); } else { hasMore = false; }
+                    if (nextLink) { page++; await new Promise(r => setTimeout(r, DELAY_BETWEEN_REQUESTS/2)); } else { hasMore = false; }
                 }
             } catch (e) { hasMore = false; }
         }
 
+        // Deabo-Check & Cache-Merge
+        const cachedData = localStorage.getItem(STORAGE_KEY);
+        if (cachedData) {
+            const cache = JSON.parse(cachedData);
+            allSeries = allSeries.map(s => {
+                const cachedVersion = cache.series.find(c => c.id === s.id);
+                return cachedVersion ? { ...s, hasNewContent: cachedVersion.hasNewContent, nextUnseenSeason: cachedVersion.nextUnseenSeason, nextUnseenSeasonURL: cachedVersion.nextUnseenSeasonURL } : s;
+            });
+        }
+
         for (let i = 0; i < allSeries.length; i++) {
+            // Only scan if not already known as "New" in the cache (optional, for speed)
+            if (allSeries[i].hasNewContent) continue;
+
             btn.innerHTML = `Check ${i + 1}/${allSeries.length}`;
             try {
                 const details = await checkSeriesDetails(allSeries[i].url);
@@ -202,7 +281,7 @@ GM_addStyle(`
                 allSeries[i].nextUnseenSeason = details.nextUnseenSeason;
                 allSeries[i].nextUnseenSeasonURL = details.nextUnseenSeasonURL;
             } catch (e) {}
-            await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, DELAY_BETWEEN_REQUESTS));
         }
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: new Date().toDateString(), series: allSeries }));
@@ -211,37 +290,47 @@ GM_addStyle(`
         btn.disabled = false;
     }
 
-function reorganizeUI(allSeries) {
-        const container = document.querySelector('.row.g-3');
-        const updates = allSeries.filter(s => s.hasNewContent);
-        if (!container || updates.length === 0) return;
+    function reorganizeUI(allSeries) {
+		// Find a template card and its container
+        const templateCard = document.querySelector('form[action*="/account/subscribed/"]')?.closest('div[class*="col-"]');
+        const container = templateCard?.parentElement;
 
-        // Nur die von uns erstellten Platzhalter entfernen,
-        // originale Cards behalten wir und modifizieren sie nur
+		if (!container) return; // To be on the safe side, cancel if there is nothing there.
+
+        // Clean up template classes from our own markers
+        const templateClasses = templateCard.className
+            .replace(/tm-highlight|tm-placeholder/g, '')
+            .trim();
+
+        const updates = allSeries.filter(s => s.hasNewContent);
+
         document.querySelectorAll('.tm-placeholder').forEach(el => el.remove());
 
         updates.reverse().forEach(series => {
-            let cardWrapper = document.querySelector(`form[action*="/${series.id}"]`)?.closest('.col-6');
-            let isPlaceholder = false;
+            let cardWrapper = document.querySelector(`form[action*="/${series.id}"]`)?.closest('div[class*="col-"]');
 
             if (!cardWrapper) {
-                cardWrapper = createPlaceholderCard(series);
-                isPlaceholder = true;
+				// Clean up template classes from our own markers
+                cardWrapper = createPlaceholderCard(series, templateClasses);
             }
 
             cardWrapper.classList.add('tm-highlight');
             const cardInner = cardWrapper.querySelector('.cover-card');
 
             if (cardInner) {
-                // Wir fügen die CSS-Klasse für den Rahmen hinzu
+                // We add the CSS class for the frame
                 cardInner.classList.add('is-new');
 
-                // Badge nur hinzufügen, wenn noch nicht da
+                // Only add badge if not already present
                 if(!cardInner.querySelector('.tm-badge')) {
+					var label = `S${series.nextUnseenSeason}`;
+					if (isNaN(series.nextUnseenSeason)) {
+						label = series.nextUnseenSeason; // For cases like "Film"
+					}
                     const badge = document.createElement('div');
                     badge.className = 'tm-badge';
-                    badge.innerText = `S${series.nextUnseenSeason} NEU`;
-                    badge.style = "position:absolute; top:5px; left:5px; background:#27ae60; color:white; padding:2px 6px; border-radius:3px; font-weight:bold; font-size:10px; z-index:10;";
+                    badge.innerText = `${label} NEU`;
+                    badge.style = badge_style;
                     cardInner.appendChild(badge);
                 }
 
@@ -251,22 +340,29 @@ function reorganizeUI(allSeries) {
                     a.target = "_blank";
                 }
             }
-            // Nach vorne schieben
+            // Push to front
             container.prepend(cardWrapper);
         });
     }
 
-    // Markiere Platzhalter in der Erstellung, damit wir sie gezielt löschen können
-    function createPlaceholderCard(series) {
+    // Mark placeholders in the creation so that we can delete them specifically.
+    function createPlaceholderCard(series, templateClasses) {
         const div = document.createElement('div');
-        div.className = "col-6 col-sm-4 col-md-3 col-lg-2 mb-3 tm-highlight tm-placeholder";
-        div.innerHTML = `<div class="seriesCard"><a href="${series.nextUnseenSeasonURL}" target="_blank" class="cover-card is-new"><img src="${series.poster}" alt="${series.title}" loading="lazy"><div class="show-title-overlay"><span class="show-title">${series.title}</span></div></a></div>`;
-        return div;
-    }
-    function createPlaceholderCard(series) {
-        const div = document.createElement('div');
-        div.className = "col-6 col-sm-4 col-md-3 col-lg-2 mb-3 tm-highlight";
-        div.innerHTML = `<div class="seriesCard"><a href="${series.nextUnseenSeasonURL}" target="_blank" class="cover-card"><img src="${series.poster}" alt="${series.title}" loading="lazy"><div class="show-title-overlay"><span class="show-title">${series.title}</span></div></a></div>`;
+
+		// We use the classes we have taken from a real card.
+        div.className = templateClasses || "col-6 col-sm-4 col-md-3 col-lg-2 mb-3";
+        div.classList.add('tm-highlight', 'tm-placeholder');
+
+        div.innerHTML = `
+            <div class="seriesCard">
+                <a href="${series.nextUnseenSeasonURL}" target="_blank" class="cover-card is-new">
+                    <img src="${series.poster}" alt="${series.title}" loading="lazy">
+                    <div class="show-title-overlay">
+                        <span class="show-title">${series.title}</span>
+                    </div>
+                </a>
+            </div>
+        `;
         return div;
     }
 
@@ -276,13 +372,16 @@ function reorganizeUI(allSeries) {
         });
     }
 
+    /*
     async function checkSeriesDetails(url) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: "GET", url,
                 onload: function(res) {
                     const doc = new DOMParser().parseFromString(res.responseText, 'text/html');
-                    const epLinks = doc.querySelectorAll('#episode-nav a'), epSeen = doc.querySelectorAll('#episode-nav a.seen'), activeS = doc.querySelector('#season-nav a.bg-primary');
+                    const epLinks = doc.querySelectorAll('#episode-nav a')
+					    , epSeen = doc.querySelectorAll('#episode-nav a.seen')
+						, activeS = doc.querySelector('#season-nav a.bg-primary');
                     let hasNew = false, nextS = null, nextSURL = null;
                     if (epLinks.length > 0 && epSeen.length !== epLinks.length) {
                         hasNew = true; nextS = activeS ? activeS.innerText.trim() : "?"; nextSURL = url;
@@ -296,5 +395,62 @@ function reorganizeUI(allSeries) {
                 onerror: reject
             });
         });
+    } //*/
+
+async function checkSeriesDetails(url) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET", url,
+                onload: async function(res) {
+                    const doc = new DOMParser().parseFromString(res.responseText, 'text/html');
+
+                    // 1. Check: Gibt es in der AKTUELL geladenen Staffel ungesehene deutsche Folgen?
+                    // Dein Selektor ist perfekt: Suche in ungesehenen Zeilen nach der deutschen Flagge
+                    const hasGermanInCurrent = doc.querySelectorAll('tr.episode-row:not(.seen) svg.svg-flag-german').length > 0;
+
+                    if (hasGermanInCurrent) {
+                        const activeS = doc.querySelector('#season-nav a.bg-primary');
+                        return resolve({
+                            hasNewContent: true,
+                            nextUnseenSeason: activeS ? activeS.innerText.trim() : "?",
+                            nextUnseenSeasonURL: url
+                        });
+                    }
+
+                    // 2. Check: Wenn in der aktuellen Staffel nichts ist, andere ungesehene Staffeln finden
+                    const nextUnseenSeasonLink = Array.from(doc.querySelectorAll('#season-nav a'))
+                        .find(s => !s.classList.contains('seen') && s.innerText.trim() !== "0" && !s.classList.contains('bg-primary'));
+
+                    if (nextUnseenSeasonLink) {
+                        const seasonURL = new URL(nextUnseenSeasonLink.getAttribute('href'), url).href;
+                        const seasonName = nextUnseenSeasonLink.innerText.trim();
+
+                        // Wir laden die nächste potenzielle Staffel
+                        try {
+                            const sRes = await new Promise((resS, rejS) => {
+                                GM_xmlhttpRequest({ method: "GET", url: seasonURL, onload: resS, onerror: rejS });
+                            });
+                            const sDoc = new DOMParser().parseFromString(sRes.responseText, 'text/html');
+
+                            // Auch hier: Dein neuer Selektor
+                            const hasGermanInNext = sDoc.querySelectorAll('tr.episode-row:not(.seen) svg.svg-flag-german').length > 0;
+
+                            if (hasGermanInNext) {
+                                return resolve({
+                                    hasNewContent: true,
+                                    nextUnseenSeason: seasonName,
+                                    nextUnseenSeasonURL: seasonURL
+                                });
+                            }
+                        } catch (e) {}
+                    }
+
+                    resolve({ hasNewContent: false });
+                },
+                onerror: reject
+            });
+        });
     }
+
+
 })();
